@@ -1,9 +1,7 @@
-import traces
 import json
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
-import datetime as dt
 import numpy as np
 
 # READ .JSON FILES FROM ABB_INVERTER.
@@ -45,41 +43,19 @@ abb_inverter = abb_inverter.rename(columns={'value': 'abb_inverter_reading'})
 
 fluke['fluke_reading'] *= -1    # CONVERT NEGATIVE POWER READINGS
 
+
 # SELECT THE START AND END TIMES OF OVERLAPPING DATA.
 start_time = max(fluke.index[0], abb_inverter.index[0])
 end_time = min(fluke.index[-1], abb_inverter.index[-1])
 
-
-
-# TODO : LINEAR INTERPOLATION-1
-# WE WILL USE TIME SERIES.
-series_fluke = pd.Series(fluke['fluke_reading'], index=fluke.index)
-ts_fluke = traces.TimeSeries(series_fluke).sample(
-    sampling_period=dt.timedelta(minutes=5),
-    start=start_time,
-    end=end_time,
-    interpolate='linear'
-)
-
-series_abb = pd.Series(abb_inverter['abb_inverter_reading'], index=abb_inverter.index)
-ts_abb = traces.TimeSeries(series_abb).sample(
-    sampling_period=dt.timedelta(minutes=5),
-    start=start_time,
-    end=end_time,
-    interpolate='linear'
-)
-# RESULT OF INTERPOLATING GIVES LIST THAT CANNOT BE USABLE, CONVERT IT BACK TO TIME SERIES.
-ts_fluke = traces.TimeSeries(ts_fluke)
-ts_abb = traces.TimeSeries(ts_abb)
-
+# SET THE DESIRED TIME_RANGE INDEX.
 index = pd.date_range(
     start=start_time,
     end=end_time,
     freq='5min',
 )
 
-# TODO : LINEAR INTERPOLATION-2
-# use the index generated above.
+# TODO : LINEAR INTERPOLATION
 rs = pd.DataFrame(index=index)      # rs FOR FLUKE READINGS
 
 idx_after = np.searchsorted(fluke.index.values, rs.index.values)
@@ -90,10 +66,11 @@ rs['before_time'] = fluke.index[idx_after-1]
 
 rs['span'] = rs['after_time'] - rs['before_time']
 rs['after_weight'] = (rs['after_time']-rs.index)/rs['span']
-rs['before_weight'] = (pd.Series(data=rs.index, index=rs.index) - rs['before_time']) / rs['span']
+rs['before_weight'] = (rs.index - rs['before_time']) / rs['span']
 
-rs['values'] = rs.eval('before * before_weight + after * after_weight')
+rs['values'] = rs.eval('after * before_weight + before * after_weight')
 
+# -----------------------------------------------------
 rs2 = pd.DataFrame(index=index)     # rs2 FOR ABB READINGS
 
 idx_after_2 = np.searchsorted(abb_inverter.index.values, rs2.index.values)
@@ -102,23 +79,21 @@ rs2['before'] = abb_inverter.loc[abb_inverter.index[idx_after_2-1], 'abb_inverte
 rs2['after_time'] = abb_inverter.index[idx_after_2]
 rs2['before_time'] = abb_inverter.index[idx_after_2-1]
 
-rs2['span'] = rs2['after_time'] - rs['before_time']
-rs2['after_weight'] = (rs2['after_time']-rs2.index)/rs2['span']
-rs2['before_weight'] = (pd.Series(data=rs2.index, index=rs2.index) - rs2['before_time']) / rs2['span']
+rs2['span'] = rs2['after_time'] - rs2['before_time']
+rs2['after_weight'] = (rs2['after_time']-rs2.index) / rs2['span']
+rs2['before_weight'] = (rs2.index - rs2['before_time']) / rs2['span']
 
-rs2['values'] = rs2.eval('before * before_weight + after * after_weight')
+rs2['values'] = rs2.eval('after * before_weight + before * after_weight')
 
 # GENERATE AN EMPTY DATAFRAME WITH SPECIFIED COLUMNS
 final_table = pd.DataFrame(index=index, columns=['fluke_reading', 'abb_reading', 'difference'])
 
-# final_table['fluke_reading'] = rs['values']     # FOR INTERPOLATION-2, FASTER
-# final_table['abb_reading'] = rs2['values']
+final_table['fluke_reading'] = rs['values']
+final_table['abb_reading'] = rs2['values']
 
-for i in index:     # FOR LOOP IS REQUIRED FOR INTERPOLATION-1, THIS IS A SLOW PROCESS
-    final_table['fluke_reading'][i] = ts_fluke.get(i)
-    final_table['abb_reading'][i] = ts_abb.get(i)
 
 final_table['difference'] = final_table['fluke_reading'] - final_table['abb_reading']
+
 
 # TODO Filename work
 start_date = start_time.strftime("%Y%m%d")
