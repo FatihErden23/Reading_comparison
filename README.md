@@ -1,4 +1,4 @@
-# Reading_comparison
+# Reading_comparison_FINALIZED
 Aim is to compare two different readings from different devices. Here we have two devices that are called:
 ->ABB Inverter
 ->Fluke
