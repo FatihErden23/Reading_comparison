@@ -2,7 +2,23 @@ import json
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
+
+
+def interpolate_to_index(df, index):
+    idx_after = np.searchsorted(df.index, index)
+    after = df.loc[df.index[idx_after], :].to_numpy()
+    before = df.loc[df.index[idx_after - 1], :].to_numpy()
+    after_time = df.index[idx_after].to_numpy()
+    before_time = df.index[idx_after - 1].to_numpy()
+    span = after_time - before_time
+    after_weight = (after_time - index.to_numpy()) / span
+    before_weight = (index.to_numpy() - before_time) / span
+    interpolated_data = (after.T * before_weight + before.T * after_weight).T
+    rtn = pd.DataFrame(interpolated_data, index=index, columns=df.columns)
+    return rtn
+
 
 # READ .JSON FILES FROM ABB_INVERTER.
 result = {}
@@ -49,58 +65,32 @@ start_time = max(fluke.index[0], abb_inverter.index[0])
 end_time = min(fluke.index[-1], abb_inverter.index[-1])
 
 # SET THE DESIRED TIME_RANGE INDEX.
+# Use ceil on start time and floor on end time since the interpolation method
+# cannot extrapolate outside the provided data.
 index = pd.date_range(
-    start=start_time,
-    end=end_time,
+    start=start_time.ceil('5min'),
+    end=end_time.floor('5min'),
     freq='5min',
 )
 
-# TODO : LINEAR INTERPOLATION
-rs = pd.DataFrame(index=index)      # rs FOR FLUKE READINGS
+rs = interpolate_to_index(fluke, index)
+rs2 = interpolate_to_index(abb_inverter, index)
 
-idx_after = np.searchsorted(fluke.index.values, rs.index.values)
-rs['after'] = fluke.loc[fluke.index[idx_after], 'fluke_reading'].values
-rs['before'] = fluke.loc[fluke.index[idx_after-1], 'fluke_reading'].values
-rs['after_time'] = fluke.index[idx_after]
-rs['before_time'] = fluke.index[idx_after-1]
+final_table = pd.merge(rs, rs2, left_index=True, right_index=True)
+final_table['difference'] = final_table['fluke_reading'] - final_table['abb_inverter_reading']
+# Hourly average values might be interesting, too
+hourly = final_table.resample('1h').mean()
 
-rs['span'] = rs['after_time'] - rs['before_time']
-rs['after_weight'] = (rs['after_time']-rs.index)/rs['span']
-rs['before_weight'] = (rs.index - rs['before_time']) / rs['span']
-
-rs['values'] = rs.eval('after * before_weight + before * after_weight')
-
-# -----------------------------------------------------
-rs2 = pd.DataFrame(index=index)     # rs2 FOR ABB READINGS
-
-idx_after_2 = np.searchsorted(abb_inverter.index.values, rs2.index.values)
-rs2['after'] = abb_inverter.loc[abb_inverter.index[idx_after_2], 'abb_inverter_reading'].values
-rs2['before'] = abb_inverter.loc[abb_inverter.index[idx_after_2-1], 'abb_inverter_reading'].values
-rs2['after_time'] = abb_inverter.index[idx_after_2]
-rs2['before_time'] = abb_inverter.index[idx_after_2-1]
-
-rs2['span'] = rs2['after_time'] - rs2['before_time']
-rs2['after_weight'] = (rs2['after_time']-rs2.index) / rs2['span']
-rs2['before_weight'] = (rs2.index - rs2['before_time']) / rs2['span']
-
-rs2['values'] = rs2.eval('after * before_weight + before * after_weight')
-
-# GENERATE AN EMPTY DATAFRAME WITH SPECIFIED COLUMNS
-final_table = pd.DataFrame(index=index, columns=['fluke_reading', 'abb_reading', 'difference'])
-
-final_table['fluke_reading'] = rs['values']
-final_table['abb_reading'] = rs2['values']
-
-
-final_table['difference'] = final_table['fluke_reading'] - final_table['abb_reading']
-
-
-# TODO Filename work
+# Create filename from start and end dates
 start_date = start_time.strftime("%Y%m%d")
 end_date = end_time.strftime("%Y%m%d")
 filename = start_date + '-' + end_date + '.pdf'
 
 # PLOT THE FINAL TABLE.
 plt.close('all')
-final_table.plot(ylabel='power reading in kW')
-plt.savefig(filename)
+with PdfPages(filename) as pdf:
+    final_table.plot(ylabel='power reading in kW')
+    pdf.savefig()
+    hourly.plot()
+    pdf.savefig()
+
