@@ -1,8 +1,8 @@
 # EE463 Homework 2 Question 2
 
 a) 5 of the most important parameters of MOSFET is listed below:
-    - Drain to source breakdown voltage, V<sub>dss,max<sub> : is the maximum voltage MOSFET can handle between the drain and source terminals.
-    - Continious Drain current, I<sub>D<sub> : is the maximum continuous current MOSFET can work with. During ON-state of the MOSFET, this amount of current can flow through the drain-source terminals.
+    - Drain to source breakdown voltage, V<sub>dss,max : is the maximum voltage MOSFET can handle between the drain and source terminals.
+    - Continious Drain current, I<sub>D : is the maximum continuous current MOSFET can work with. During ON-state of the MOSFET, this amount of current can flow through the drain-source terminals.
     - Drain to source ON-resistance, R<sub>ds,on<\sub> : is the resistance between the drain and source terminals during the ON-state (conduction) mode. Conduction losses are dissipated as heat.
     - Gate charge, Q<sub>g<\sub> : is the required amount of charge to make transition between ON and OFF states.
     - Reverse-recovery time, t<sub>rr<\sub> : is the time elapsed during the body diode goes from conduction(ON) to blocking(OFF) state. This body diode is used as a freewheeling diode for the return path of the current. This parameter is important when dealing with high frequency switching operations. It limits the proper working frequency of the device.
